@@ -8,10 +8,8 @@ const ArtifactFileTries = process.env.ArtifactFileTries || 10;
 const ArtifactPath = process.env.ArtifactPath || './Artifacts';
 
 
-
-
 const WebSocketServer = new WebSocketModule.Server({ port: Port });
-
+console.log(`Started websocket server on ${JSON.stringify(WebSocketServer.address())}`);
 WebSocketServer.on('connection',StartWebsocketClientThread);
 
 
@@ -64,12 +62,14 @@ function StartWebsocketClientThread(Client,Request)
 		//	if error, send hail mary message before disconnecting
 		if ( Error )
 		{
+			console.log(`Disconnect, sending hail mary error message ${Error}`);
 			const Message = {};
 			Message.Error = Error;
 			Client.send(JSON.stringify(Message));
 		}
 		Client.terminate();
 	}
+	Client.on('error',Disconnect);
 	WebsocketClientThread(Client).then(Disconnect).catch(Disconnect);
 }
 
@@ -130,4 +130,6 @@ async function WebsocketClientThread(Client)
 	const ReadFinishedPromise = await RecvLoop();
 	//	occasionly send back meta
 	//	check for size limits & stop
+	
 }
+
