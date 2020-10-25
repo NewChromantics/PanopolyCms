@@ -15,6 +15,14 @@ function CreatePromise()
 }
 
 
+function Yield(Milliseconds)
+{
+	const Promise = CreatePromise();
+	setTimeout( Promise.Resolve, Milliseconds );
+	return Promise;
+}
+
+
 //	a promise queue that manages multiple listeners
 //	gr: this is getting out of sync with the cyclic-fixing-copy in WebApi. Make it seperate!
 class PromiseQueue
@@ -176,8 +184,10 @@ class PromiseQueue
 }
 
 //	node.js compatible module format
+//	gr: how can I export an import with node... want to split this into multiple modules
 module.exports =
 {
 	PromiseQueue,
-	CreatePromise
+	CreatePromise,
+	Yield
 };
