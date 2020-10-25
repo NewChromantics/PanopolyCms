@@ -14,6 +14,18 @@ function CreatePromise()
 	return Prom;
 }
 
+//	RandomInt(1,10)	returns 1..9
+function RandomInt(Min,MaxExclusive)
+{
+	let Rand = Math.random();
+	const Range = MaxExclusive - Min;
+	//	scale
+	Rand = Rand * Range;
+	//	make int
+	Rand = Math.floor(Rand);
+	Rand += Min;
+	return Rand;
+}
 
 function Yield(Milliseconds)
 {
@@ -189,5 +201,6 @@ module.exports =
 {
 	PromiseQueue,
 	CreatePromise,
-	Yield
+	Yield,
+	RandomInt	//	Math.
 };

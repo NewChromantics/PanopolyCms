@@ -18,7 +18,12 @@ function GetNewArtifactName()
 {
 	//	random X chars in alphabet
 	const Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	return "ABCD";
+	const a = Pop.RandomInt(0,Alphabet.length);
+	const b = Pop.RandomInt(0,Alphabet.length);
+	const c = Pop.RandomInt(0,Alphabet.length);
+	const d = Pop.RandomInt(0,Alphabet.length);
+	const abcd = [a,b,c,d].map( i => Alphabet[i] );
+	return abcd.join('');
 }
 
 
