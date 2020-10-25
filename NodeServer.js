@@ -2,14 +2,42 @@ const os = require( 'os' );
 const fs = require( 'fs' );
 const WebSocketModule = require('ws');
 const Pop = require('./PopApi');
+const ExpressModule = require('express');
 
-const Port = process.env.Port || 8888;	//	gr: needs to be int?
-const ArtifactFileTries = process.env.ArtifactFileTries || 10;
+
+const CorsOrigin = process.env.CorsOrigin || '*';
+const ErrorStatusCode = process.env.ErrorStatusCode || 500;
+const StaticFilesPath = process.env.StaticFilesPath || './';
+const PullPort = process.env.PullPort || 80;
+const PushPort = process.env.PushPort || 8888;
+const ArtifactFileTries = process.env.ArtifactFileTries || 20;
 const ArtifactPath = process.env.ArtifactPath || './Artifacts';
+try
+{
+	const AllEnv = JSON.stringify(process.env,null,'\t');
+	console.log(`env (all) ${AllEnv}`);
+}
+catch(e)
+{
+	console.log(`env (all) error -> ${e}`);
+}
 
 
-const WebSocketServer = new WebSocketModule.Server({ port: Port });
-console.log(`Started websocket server on ${JSON.stringify(WebSocketServer.address())}`);
+const RecordStreamPacketDelin = 'Pop\n';	//	gr: i insert this before every packet when writing files, so we need it here too.
+const ArtifactUrlPattern = new RegExp('\/([A-Za-z]){4}$')
+const ArtifactAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+
+//	artifact server
+const HttpServerApp = ExpressModule();
+HttpServerApp.get(ArtifactUrlPattern,HandleGetArtifact);
+HttpServerApp.get('/', function (req, res) { res.redirect('/index.html') });
+HttpServerApp.use('/', ExpressModule.static(StaticFilesPath));
+const HttpServer = HttpServerApp.listen( PullPort, () => console.log( `Pull http server on ${JSON.stringify(HttpServer.address())}` ) );
+
+//	artifact recorder
+const WebSocketServer = new WebSocketModule.Server({ port: PushPort });
+console.log(`Push websocket server on ${JSON.stringify(WebSocketServer.address())}`);
 WebSocketServer.on('connection',StartWebsocketClientThread);
 
 
@@ -17,13 +45,17 @@ WebSocketServer.on('connection',StartWebsocketClientThread);
 function GetNewArtifactName()
 {
 	//	random X chars in alphabet
-	const Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	const a = Pop.RandomInt(0,Alphabet.length);
-	const b = Pop.RandomInt(0,Alphabet.length);
-	const c = Pop.RandomInt(0,Alphabet.length);
-	const d = Pop.RandomInt(0,Alphabet.length);
-	const abcd = [a,b,c,d].map( i => Alphabet[i] );
+	const a = Pop.RandomInt(0,ArtifactAlphabet.length);
+	const b = Pop.RandomInt(0,ArtifactAlphabet.length);
+	const c = Pop.RandomInt(0,ArtifactAlphabet.length);
+	const d = Pop.RandomInt(0,ArtifactAlphabet.length);
+	const abcd = [a,b,c,d].map( i => ArtifactAlphabet[i] );
 	return abcd.join('');
+}
+
+function GetArtifactFilename(ArtifactName)
+{
+	return `${ArtifactPath}/${ArtifactName}.PopCap`;		
 }
 
 
@@ -32,7 +64,7 @@ class TArtifact
 	constructor(Name)
 	{
 		this.Name = Name;
-		this.Filename = `${ArtifactPath}/${this.Name}.PopCap`;
+		this.Filename = GetArtifactFilename(this.Name);
 		this.Error = null;
 		this.Stream = null;
 		
@@ -48,7 +80,7 @@ class TArtifact
 		this.Error = Error || 'Unspecified stream error';
 	}
 	
-	Write(Data)
+	WritePacket(Data)
 	{
 		//	file has errored!
 		if ( this.Error !== null )
@@ -56,6 +88,7 @@ class TArtifact
 			console.log(`Error failed as file has failed ${this.Error}`);
 			throw this.Error;
 		}
+		this.Stream.write(RecordStreamPacketDelin);
 		this.Stream.write(Data);
 		//console.log(`Wrote x${Data.length}`);
 	}
@@ -155,9 +188,10 @@ async function WebsocketClientThread(Client)
 	//	open file with random handle
 	const Artifact = await OpenNewArtifactStream();
 	{
+		//	add meta here
 		const StreamInitMessage = {};
 		StreamInitMessage.CmsInit = true;
-		Artifact.Write(JSON.stringify(StreamInitMessage));
+		Artifact.WritePacket(JSON.stringify(StreamInitMessage));
 	}
 	//	send back Artifact Name
 	{
@@ -174,7 +208,7 @@ async function WebsocketClientThread(Client)
 		while(Connected)
 		{
 			const Message = await RecvMessageQueue.WaitForNext();
-			Artifact.Write(Message);
+			Artifact.WritePacket(Message);
 		}
 	}
 	
@@ -206,4 +240,57 @@ async function WebsocketClientThread(Client)
 	
 	return 'WebsocketClientThread finished';
 }
+
+
+async function GetArtifactPipe(Request)
+{
+	const ArtifactName = Request.path.slice(1).toUpperCase();	//	strip / and we allow lower case letters, but artifacts are uppercase
+	console.log(`Requst artifact ${ArtifactName}`);
+	const ArtifactFilename = GetArtifactFilename(ArtifactName);
+	//	gr: this doesn't 404 here...
+	const Stream = fs.createReadStream(ArtifactFilename);
+	return Stream;
+}
+
+
+async function HandleGetArtifact(Request,Response)
+{
+	try
+	{
+		const ArtifactStream = await GetArtifactPipe(Request);
+		
+		const Output = {};
+		Output.Mime = 'application/octet-stream';
+		
+		const StreamFinished = Pop.CreatePromise();
+		
+		ArtifactStream.on('end', StreamFinished.Resolve );
+		ArtifactStream.on('error', StreamFinished.Reject );
+		
+		//	PopImageServer generic code
+		//const Output = await RunApp(Request);
+		Output.StatusCode = Output.StatusCode || 200;
+		Output.Mime = Output.Mime || 'text/plain';
+
+		Response.statusCode = Output.StatusCode;
+		Response.setHeader('Content-Type',Output.Mime);
+		Response.setHeader('Access-Control-Allow-Origin',CorsOrigin);	//	allow CORS
+		ArtifactStream.pipe(Response);
+		
+		//	should this wait until end event?
+		//	we kinda need a way to stop if there was an error and not pipe until then?
+		console.log(`Wait for stream finished`);
+		await StreamFinished;
+		Response.end();
+		//Response.end(Output.Output);
+	}
+	catch (e)
+	{
+		console.log(`RunApp error -> ${e}`);
+		Response.statusCode = ErrorStatusCode;
+		Response.setHeader('Content-Type','text/plain');
+		Response.end(`Error ${e}`);
+	}
+}
+
 
