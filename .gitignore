@@ -7,3 +7,5 @@ package-lock.json
 
 *.xcworkspace/xcshareddata/
 *.xcworkspace/xcuserdata/
+
+Artifacts/
