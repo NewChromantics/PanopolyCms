@@ -9,7 +9,7 @@ const CorsOrigin = process.env.CorsOrigin || '*';
 const ErrorStatusCode = process.env.ErrorStatusCode || 500;
 const StaticFilesPath = process.env.StaticFilesPath || './';
 const PullPort = process.env.PullPort || 80;
-const PushPort = process.env.PushPort || 8888;
+const PushPort = process.env.PushPort || 80;
 const ArtifactFileTries = process.env.ArtifactFileTries || 20;
 const ArtifactPath = process.env.ArtifactPath || './Artifacts';
 try
@@ -28,6 +28,9 @@ const ArtifactUrlPattern = new RegExp('\/([A-Za-z]){4}$')
 const ArtifactAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 
+//	gr: for sloppy, we can only expose one port (I think), so we share the http server
+const SharingHttpServer = ( PullPort == PushPort );
+
 //	artifact server
 const HttpServerApp = ExpressModule();
 HttpServerApp.get(ArtifactUrlPattern,HandleGetArtifact);
@@ -36,9 +39,26 @@ HttpServerApp.use('/', ExpressModule.static(StaticFilesPath));
 const HttpServer = HttpServerApp.listen( PullPort, () => console.log( `Pull http server on ${JSON.stringify(HttpServer.address())}` ) );
 
 //	artifact recorder
-const WebSocketServer = new WebSocketModule.Server({ port: PushPort });
-console.log(`Push websocket server on ${JSON.stringify(WebSocketServer.address())}`);
+const WebSocketOptions = SharingHttpServer ? { noServer:SharingHttpServer } : { port: PushPort };
+const WebSocketServer = new WebSocketModule.Server(WebSocketOptions);
 WebSocketServer.on('connection',StartWebsocketClientThread);
+
+if ( SharingHttpServer )
+{
+	HttpServer.on('upgrade', (request, socket, head) => 
+	{
+		WebSocketServer.handleUpgrade(request, socket, head, socket => 
+		{
+			WebSocketServer.emit('connection', socket, request);
+		}
+		);
+	});
+	
+	//	get an exception if we use this address() in no-server mode
+	WebSocketServer.address = HttpServer.address;
+}
+
+console.log(`Push websocket server on ${JSON.stringify(WebSocketServer.address())}`);
 
 
 
