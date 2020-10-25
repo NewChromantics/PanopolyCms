@@ -49,5 +49,5 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: docker.pkg.github.com
-          repository: ${{ steps.lowerCaseRepo.outputs.lowercase }}/${{ steps.lowerCaseRepo.outputs.lowercase }}
+          repository: ${{ steps.lowerCaseRepo.outputs.lowercase }}/panopolycms
           tag_with_ref: true
