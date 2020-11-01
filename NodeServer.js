@@ -108,6 +108,7 @@ class TArtifact
 		this.Filename = GetArtifactFilename(this.Name);
 		this.Error = null;
 		this.Stream = null;
+		this.BytesWritten = 0;
 		
 		const Options = {};
 		Options.flags = 'wx';	//	x = fail if exists
@@ -132,6 +133,14 @@ class TArtifact
 		this.Stream.write(RecordStreamPacketDelin);
 		this.Stream.write(Data);
 		//console.log(`Wrote x${Data.length}`);
+		
+		this.BytesWritten += RecordStreamPacketDelin.length;
+		this.BytesWritten += Data.length;
+	}
+	
+	GetSize()
+	{
+		return this.BytesWritten;
 	}
 }
 
@@ -250,6 +259,14 @@ async function WebsocketClientThread(Client)
 		{
 			const Message = await RecvMessageQueue.WaitForNext();
 			Artifact.WritePacket(Message);
+			
+			//	stop thread once we exceed size
+			if ( ArtifactSizeLimit !== null )
+			{
+				const ArtifactSize = Artifact.GetSize();
+				if ( ArtifactSize >= ArtifactSizeLimit )
+					throw `Stream has exceeded size limit (${ArtifactSize} >= ${ArtifactSizeLimit})`;
+			}
 		}
 	}
 	
