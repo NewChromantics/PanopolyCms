@@ -47,7 +47,7 @@ catch(e)
 const RecordStreamPacketDelin = 'Pop\n';	//	gr: i insert this before every packet when writing files, so we need it here too.
 const ArtifactUrlPattern = new RegExp('\/([A-Za-z]){4}$')
 const ArtifactAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
+const ArtifactListUrl = '/ls';
 
 //	gr: for sloppy, we can only expose one port (I think), so we share the http server
 const SharingHttpServer = ( PullPort == PushPort );
@@ -55,6 +55,7 @@ const SharingHttpServer = ( PullPort == PushPort );
 //	artifact server
 const HttpServerApp = ExpressModule();
 HttpServerApp.get(ArtifactUrlPattern,HandleGetArtifact);
+HttpServerApp.get(ArtifactListUrl,HandleGetFileList);
 HttpServerApp.get('/', function (req, res) { res.redirect('/index.html') });
 HttpServerApp.use('/', ExpressModule.static(StaticFilesPath));
 const HttpServer = HttpServerApp.listen( PullPort, () => console.log( `Pull http server on ${JSON.stringify(HttpServer.address())}` ) );
@@ -345,6 +346,52 @@ async function HandleGetArtifact(Request,Response)
 	catch (e)
 	{
 		console.log(`RunApp error -> ${e}`);
+		Response.statusCode = ErrorStatusCode;
+		Response.setHeader('Content-Type','text/plain');
+		Response.end(`Error ${e}`);
+	}
+}
+
+
+
+async function HandleGetFileList(Request,Response)
+{
+	try
+	{
+		//	get list of files as a promise
+		const FileListPromise = Pop.CreatePromise();
+		function OnReadDir(Error,Files)
+		{
+			if ( Error )
+				FileListPromise.Reject(Error);
+			else
+				FileListPromise.Resolve(Files);
+		}
+		const Options = { withFileTypes: true };
+		fs.readdir(ArtifactPath, Options, OnReadDir );
+		const Files = await FileListPromise;
+				
+		
+		//	gr: now filter artifact names, get some meta etc
+				
+		const Output = {};
+		Output.Output = JSON.stringify(Files,null,'\t');
+		
+		
+		
+		
+		//	PopImageServer generic code
+		Output.StatusCode = Output.StatusCode || 200;
+		Output.Mime = Output.Mime || 'text/plain';
+
+		Response.statusCode = Output.StatusCode;
+		Response.setHeader('Content-Type',Output.Mime);
+		
+		Response.end(Output.Output);
+	}
+	catch (e)
+	{
+		console.log(`HandleGetList error -> ${e}`);
 		Response.statusCode = ErrorStatusCode;
 		Response.setHeader('Content-Type','text/plain');
 		Response.end(`Error ${e}`);
