@@ -5,13 +5,34 @@ const Pop = require('./PopApi');
 const ExpressModule = require('express');
 
 
+function NumberOrNull(Value,Name)
+{
+	if ( Value == 'null' )
+		return null;
+	const Num = Number(Value);
+	if ( isNaN(Num) )
+		throw `${Value}(${Name}) needs to be a number`;
+	return Value;
+}
+function IntegerOrNull(Value,Name)
+{
+	const Num = NumberOrNull(Value);
+	if ( Num === null )
+		return null;
+	if ( !Number.isInteger(Num) )
+		throw `${Value}(${Name}) needs to be integer`;
+	return Num;
+}
+
+//	gr: can I use assign()?
 const CorsOrigin = process.env.CorsOrigin || '*';
-const ErrorStatusCode = process.env.ErrorStatusCode || 500;
+const ErrorStatusCode = IntegerOrNull( process.env.ErrorStatusCode || 500, 'ErrorStatusCode' );
 const StaticFilesPath = process.env.StaticFilesPath || './';
-const PullPort = process.env.PullPort || 80;
-const PushPort = process.env.PushPort || 80;
-const ArtifactFileTries = process.env.ArtifactFileTries || 20;
+const PullPort = IntegerOrNull( process.env.PullPort || 80, 'PullPort' );
+const PushPort = IntegerOrNull( process.env.PushPort || 80, 'PushPort' );
+const ArtifactFileTries = IntegerOrNull( process.env.ArtifactFileTries || 20, 'ArtifactFileTries' );
 const ArtifactPath = process.env.ArtifactPath || './Artifacts';
+const ArtifactSizeLimit = NumberOrNull(process.env.ArtifactSizeLimit || (200*1024*1024), 'ArtifactSizeLimit' );
 try
 {
 	const AllEnv = JSON.stringify(process.env,null,'\t');
